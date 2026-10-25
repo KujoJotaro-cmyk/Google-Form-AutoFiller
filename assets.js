@@ -5,9 +5,15 @@ const jsdom = require("jsdom");
 const config = require("./config");
 const { JSDOM } = jsdom;
 
+const userAgents = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+];
 
 function debugLog(...args){
-    if(!config.debug.sendDebugLogs) return;
+    if(!config.debug?.sendDebugLogs) return;
     console.log("[DEBUG]",...args);
 }
 
@@ -75,7 +81,7 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
             continue;
         }
         const entryId = question[4]?.[0]?.[0];
-        if(!entryId && questionType !== 8){
+        if(!entryId && questionType !== 8 && questionType !== 7){
             console.error(`Entry ID missing! (Question Type=${questionType})`);
             console.error(`Error Filling Out Form: Most likely protected by Google account verification.`)
             process.exit();
@@ -91,13 +97,6 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                 const stringAnswer = generateStringResponse(questionType);
                 if(questionValidation){
                     const validationType = questionValidation[0];
-                    /*
-                    Validation Types
-                    1 = Number
-                    2 = Text
-                    6 = Length
-                    4 = Regular Expression (RegExp)
-                    */
                     const validationSubType = questionValidation[1];
                     const validationQuery = questionValidation[2]?.[0] ?? null;
 
@@ -105,29 +104,29 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                         case 1: //Number
                             const numberValidationQuery = parseInt(validationQuery ?? 1);
                             switch(validationSubType){
-                                case 1: //answer must be greater than query
-                                case 2: //answer must be greater than or equal to query
+                                case 1:
+                                case 2:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent((numberValidationQuery+1).toString())}`);
                                     debugLog(`Filled out string entry with a number (${numberValidationQuery+1})`);
                                     break;
-                                case 3: //answer must be less than query
-                                case 4: //answer must be less than or equal to query
-                                case 8: //answer not between 2 queries (exclusive)
+                                case 3:
+                                case 4:
+                                case 8:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent((numberValidationQuery - 1).toString())}`);
                                     debugLog(`Filled out string entry with a number (${numberValidationQuery - 1})`);
                                     break;
-                                case 5: //answer must equal the query
-                                case 7: //answer between 2 queries (inclusive)
+                                case 5:
+                                case 7:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent((numberValidationQuery).toString())}`);
                                     debugLog(`Filled out string entry with a number (${numberValidationQuery})`);
                                     break;
-                                case 6: //answer must not equal query
+                                case 6:
                                     const randomAnswer = numberValidationQuery + ~~(Math.random() * 50);
                                     formBody.push(`entry.${entryId}=${encodeURIComponent((randomAnswer).toString())}`);
                                     debugLog(`Filled out string entry with a number (${randomAnswer})`);
                                     break;
-                                case 9: //answer must be a number
-                                case 10: //answer must be a whole number
+                                case 9:
+                                case 10:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent((~~(Math.random() * 50)).toString())}`);
                                     debugLog(`Filled out string entry with a random number`);
                                     break
@@ -138,40 +137,40 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                             break;
                         case 2: //Text
                             switch(validationSubType){
-                                case 100: //answer must contain this
+                                case 100:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent(`${validationQuery} || ${stringAnswer}`)}`);
-                                    debugLog(`Filled out string entry with a modified string (id=${validationType}.${validationSubType})(type=${questionType})`);
+                                    debugLog(`Filled out string entry with a modified string`);
                                     break;
-                                case 101: //answer must not contain this
+                                case 101:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent(stringAnswer.replaceAll(validationQuery,""))}`);
-                                    debugLog(`Filled out string entry with a modified string (id=${validationType}.${validationSubType})(type=${questionType})`);
+                                    debugLog(`Filled out string entry with a modified string`);
                                     break;
-                                case 102: //answer must be an email
+                                case 102:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent(config.answers.emailAnswer)}`);
-                                    debugLog(`Filled out string entry with an email(type=${questionType})`);
+                                    debugLog(`Filled out string entry with an email`);
                                     break;
-                                case 103: //answer must be a URL
+                                case 103:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent(config.answers.urlAnswer)}`);
-                                    debugLog(`Filled out string entry with a URL(type=${questionType})`);
+                                    debugLog(`Filled out string entry with a URL`);
                                     break;
                             }
                             break;
                         case 6: //Length
                             const lengthValidationQuery = parseInt(validationQuery ?? 1);    
                             switch (validationSubType) {
-                                case 202: //maximum of query characters allowed 
+                                case 202:
                                     formBody.push(`entry.${entryId}=${encodeURIComponent(stringAnswer.substring(0,lengthValidationQuery))}`);
-                                    debugLog(`Filled out string entry with a shortened answer(type=${questionType})`);
+                                    debugLog(`Filled out string entry with a shortened answer`);
                                     break;
-                                case 203: //minmum of query characters allowed
+                                case 203:
                                     const lengthDiff = stringAnswer.length - lengthValidationQuery;
                                     const extraChars = (lengthDiff > 0) ? generateRandomString(lengthDiff) : "";
                                     formBody.push(`entry.${entryId}=${encodeURIComponent(`${stringAnswer} | ${extraChars}`)}`);
-                                    debugLog(`Filled out string entry with a random string at the end to match length(type=${questionType})`);
+                                    debugLog(`Filled out string entry with a random string at the end`);
                                     break;
                             }
                             break;
-                        case 4: //RegExp
+                        case 4:
                             console.error(`No handling for RegExp question validation!`);
                             break;
                         default:
@@ -180,15 +179,14 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                     }
 
                     break;
-                    //console.error(`No handling for question validation. IDs: ${id1},${id2}`);
                 }
                 formBody.push(`entry.${entryId}=${encodeURIComponent(stringAnswer)}`);
                 debugLog(`Filled out string entry (type=${questionType})`);
                 break;
-            case 18: //Star rating
-            case 3: // Dropdown
-            case 5: //Linear scale
-            case 2: // Multiple choice (Single selection)
+            case 18:
+            case 3:
+            case 5:
+            case 2:
                 const choiceOptions = question[4][0][1];
                 const randomChoice = ~~(Math.random() * choiceOptions.length);
                 const choice = choiceOptions[randomChoice][0];
@@ -196,7 +194,7 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                 debugLog(`Selected random multiple choice answer[type=${questionType}]: ${choice}`);
                 formBody.push(`entry.${entryId}=${encodeURIComponent(choice)}`);
                 break;
-            case 4: // Checkboxes (Multiple selection)
+            case 4:
                 const choices = question[4][0][1];
                 let selectedChoiceAmt = 0;
                 debugLog("Question Validation Info:", questionValidation);
@@ -207,8 +205,8 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                     const numberValidationQuery = parseInt(validationQuery);
 
                     switch(validationSubType){
-                        case 204: //Select exact amount of checkboxes
-                        case 200: //Select at least query checkboxes
+                        case 204:
+                        case 200:
                             for (let i = 0; i < choices.length; i++) {
                                 if (selectedChoiceAmt < numberValidationQuery) {
                                     selectedChoiceAmt++;
@@ -217,7 +215,7 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                                 }
                             }
                         break;
-                        case 201: //Select at most query checkboxes
+                        case 201:
                             for (let i = 0; i < choices.length; i++) {
                                 if ((Math.random() > 0.5) || ((selectedChoiceAmt < numberValidationQuery) && (i === choices.length - 1))) {
                                     selectedChoiceAmt++;
@@ -228,7 +226,6 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                         break;
                     }
                     break;
-                    //console.error(`No handling for question validation. IDs: ${id1},${id2}`);
                 }
 
                 for (let i = 0; i < choices.length; i++) {
@@ -239,10 +236,10 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                     }
                 }
                 break;
-            case 8: //Section Divider
+            case 8:
                 pageHistory.push(++sectionCounter);
                 break;
-            case 9: // Date
+            case 9:
                 const needsTime = question[4][0][7][0] === 1;
 
                 if (needsTime) {
@@ -252,7 +249,7 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
                     formBody.push(`entry.${entryId}_hour=${encodeURIComponent(randomHour)}`);
                     formBody.push(`entry.${entryId}_minute=${encodeURIComponent(randomMinute)}`);
 
-                    debugLog(`Generated a random time: ${randomHour} hour(s), ${randomMinute} minute(s) (type=${questionType})`);
+                    debugLog(`Generated a random time: ${randomHour} hour(s), ${randomMinute} minute(s)`);
                 }
 
                 const randomYear = ~~(Math.random() * 10000);
@@ -265,14 +262,17 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
 
                 debugLog(`Generated a random date: Year ${randomYear}, Month ${randomMonth}, Day ${randomDay}`);
                 break;
-            case 10: //Time
+            case 10:
                 const randomHour = ~~(Math.random() * 25);
                 const randomMinute = ~~(Math.random() * 60);
 
                 formBody.push(`entry.${entryId}_hour=${encodeURIComponent(randomHour)}`);
                 formBody.push(`entry.${entryId}_minute=${encodeURIComponent(randomMinute)}`);
 
-                debugLog(`Generated a random time: ${randomHour} hour(s), ${randomMinute} minute(s) (type=${questionType})`);
+                debugLog(`Generated a random time: ${randomHour} hour(s), ${randomMinute} minute(s)`);
+                break;
+            case 7:
+                debugLog(`[Skipping Question] Grid question (type=${questionType}) ID:`, question[0]);
                 break;
             default:
                 console.warn(`Unsupported question type: ${questionType}`);
@@ -280,9 +280,6 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
         }
     }
 
-    
-    
-    //this sees if the form is set to collect email addresses and adds the needed data
     if (fillOutWithEmail) formBody.push(`emailAddress=${encodeURIComponent(config.answers.emailAnswer)}`);
     
     formBody.push(`fvv=1`);
@@ -295,15 +292,6 @@ function generateRequestBody(fbzx,fbPublicLoadData) {
     return formBody.join("&");
 }
 
-/**
- * Selects a checkbox answer and adds it to the form body.
- * @param {Array} formBody - The form body array.
- * @param {number} entryId - The entry ID of the question.
- * @param {Array} question - The question array.
- * @param {number} iteration - The current iteration index.
- * @param {Array} choices - The choices array for the checkbox question.
- * @returns {void}
- */
 function selectCheckboxAnswer(formBody, entryId, question, iteration, choices){
     const isOtherOption = question[4][0][1][iteration][4] === 1;
     if(isOtherOption){
@@ -315,31 +303,17 @@ function selectCheckboxAnswer(formBody, entryId, question, iteration, choices){
     else formBody.push(`entry.${entryId}=${encodeURIComponent(choices[iteration][0])}`);
 }
 
-/**
- * Returns a predefined response for a given question type.
- * 
- * @param {number} questionType - The question type, typically 0 (short answer) or 1 (long answer)
- * @returns {string} - The predefined response from config
- */
 function generateStringResponse(questionType) {
     if (![0, 1].includes(questionType)) questionType = 0;
     return config.answers[questionType] || "";
 }
 
-
-/**
- * Submit the form using the provided data.
- * @param {string} formUrl - The URL of the Google Form. Should point to the /viewform endpoint.
- * @param {string} fbzx - The session-specific fbzx value extracted from the form.
- * @param {string} requestBody - The formatted request body containing form entries and metadata.
- * @returns {Promise<Response>} - The fetch response.
- */
 async function submitForm(formUrl, fbzx, requestBody) {
     try {
         const submitResponse = await fetch(formUrl.replace("/viewform", "/formResponse"), {
             credentials: "include",
             headers: {
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+                "User-Agent": userAgents[Math.floor(Math.random() * userAgents.length)],
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-CA,en-US;q=0.7,en;q=0.3",
                 "Content-Type": "application/x-www-form-urlencoded",
